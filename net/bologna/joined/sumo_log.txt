@@ -1,0 +1,20 @@
+载入 net-file (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\joined\joined_buslanes.net.xml') ... done (64ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\joined\joined_bus_stops.add.xml') ... done (10ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\joined\joined_detectors.add.xml') ... done (12ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\joined\joined_vtypes.add.xml') ... done (10ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\joined\joined_tls.add.xml') ... done (10ms).
+载入完成。
+仿真开始时间： 0.00。
+Warning: Teleporting vehicle 'Pepoli_11_773'; waited too long (jam), lane='a201_1', time=2462.00.
+Warning: 车辆'Pepoli_11_773'在路段'a201c'结束传送，时间=2462.00。
+仿真于此时刻结束：5103.00.
+Reason: All vehicles have left the simulation.
+Performance:
+ Duration: 97.15s
+ Real time factor: 52.5254
+ UPS: 43951.035995
+Vehicles:
+ Inserted: 11176
+ Running: 0
+ Waiting: 0
+ Teleports: 1 (Jam: 1)

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes>
+    <!-- 引用车辆类型 -->
+    <vType id="EMCar" vClass="emergency" guiShape="emergency" speedFactor="normc(1,0.1)" maxSpeed="20" color="0,0,1"/>
+
+    <!-- 定义车辆流 -->
+    <flow id="ambulance_flow2" type="EMCar" begin="0" end="3600"  period="1200" from="137" to="14"/>
+</routes>

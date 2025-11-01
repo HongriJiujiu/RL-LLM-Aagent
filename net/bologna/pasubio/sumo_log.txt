@@ -1,0 +1,18 @@
+载入 net-file (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\pasubio\pasubio_buslanes.net.xml') ... done (33ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\pasubio\pasubio_vtypes.add.xml') ... done (2ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\pasubio\pasubio_bus_stops.add.xml') ... done (14ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\pasubio\pasubio_busses.rou.xml') ... done (29ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\pasubio\pasubio_detectors.add.xml') ... done (12ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-scenarios\sumo-scenarios\bologna\pasubio\pasubio_tls.add.xml') ... done (11ms).
+载入完成。
+仿真开始时间： 0.00。
+仿真于此时刻结束：5273.00.
+Reason: All vehicles have left the simulation.
+Performance:
+ Duration: 73.21s
+ Real time factor: 72.0237
+ UPS: 41050.278643
+Vehicles:
+ Inserted: 8776
+ Running: 0
+ Waiting: 0

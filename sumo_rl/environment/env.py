@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple, Union
-
+from typing import Dict, List
 
 if "SUMO_HOME" in os.environ:
     tools = os.path.join(os.environ["SUMO_HOME"], "tools")
@@ -85,6 +85,9 @@ class SumoEnvironment(gym.Env):
         self,
         net_file: str,
         route_file: str,
+        rl: bool = False,
+        add_instruction=None,
+        rl_tls_ids: List[str] = [],
         out_csv_name: Optional[str] = None,
         use_gui: bool = False,
         virtual_display: Tuple[int, int] = (3200, 1800),
@@ -108,6 +111,7 @@ class SumoEnvironment(gym.Env):
         fixed_ts: bool = False,
         sumo_warnings: bool = True,
         additional_sumo_cmd: Optional[str] = None,
+        additional_files: Optional[Union[str, List[str]]] = None,
         render_mode: Optional[str] = None,
     ) -> None:
         """Initialize the environment."""
@@ -115,9 +119,13 @@ class SumoEnvironment(gym.Env):
         self.render_mode = render_mode
         self.virtual_display = virtual_display
         self.disp = None
-
+        self.add_instruction = add_instruction
         self._net = net_file
-        self._route = route_file
+        # 将 self._route 改为支持列表或逗号分隔字符串
+        if isinstance(route_file, (list, tuple)):
+            self._route = ",".join(route_file)
+        else:
+            self._route = route_file  # 可以是单个文件或逗号分隔字符串
         self.use_gui = use_gui
         if self.use_gui or self.render_mode is not None:
             self._sumo_binary = sumolib.checkBinary("sumo-gui")
@@ -126,7 +134,7 @@ class SumoEnvironment(gym.Env):
 
         assert delta_time > yellow_time, "Time between actions must be at least greater than yellow time."
         assert max_green > min_green, "Max green time must be greater than min green time."
-
+        self.ambulance_times={}
         self.begin_time = begin_time
         self.sim_max_time = begin_time + num_seconds
         self.delta_time = delta_time  # seconds on sumo at each step
@@ -144,6 +152,11 @@ class SumoEnvironment(gym.Env):
         self.fixed_ts = fixed_ts
         self.sumo_warnings = sumo_warnings
         self.additional_sumo_cmd = additional_sumo_cmd
+         # new: accept str "a,b" or list ["a","b"]
+        if isinstance(additional_files, (list, tuple)):
+            self.additional_files = ",".join(additional_files)
+        else:
+            self.additional_files = additional_files  # can be None or comma-separated str
         self.add_system_info = add_system_info
         self.add_per_agent_info = add_per_agent_info
         self.label = str(SumoEnvironment.CONNECTION_LABEL)
@@ -151,13 +164,27 @@ class SumoEnvironment(gym.Env):
         self.sumo = None
 
         if LIBSUMO:
-            traci.start([sumolib.checkBinary("sumo"), "-n", self._net])  # Start only to retrieve traffic light information
+            cmd = [sumolib.checkBinary("sumo"), "-n", self._net]
+            if self.additional_files:
+                cmd.extend(["--additional-files", self.additional_files])
+            if self.add_instruction:
+                cmd.extend(self.add_instruction)
+            traci.start(cmd)  # Start only to retrieve traffic light information
             conn = traci
         else:
-            traci.start([sumolib.checkBinary("sumo"), "-n", self._net], label="init_connection" + self.label)
+            cmd = [sumolib.checkBinary("sumo"), "-n", self._net]
+            if self.additional_files:
+                cmd.extend(["--additional-files", self.additional_files])
+            if self.add_instruction:
+                cmd.extend(self.add_instruction)
+            traci.start(cmd, label="init_connection" + self.label)
             conn = traci.getConnection("init_connection" + self.label)
 
         self.ts_ids = list(conn.trafficlight.getIDList())
+        if rl:
+            self.rl_tls_ids=self.ts_ids
+        else:
+            self.rl_tls_ids=rl_tls_ids
         self.observation_class = observation_class
 
         self._build_traffic_signals(conn)
@@ -193,20 +220,22 @@ class SumoEnvironment(gym.Env):
             for ts in self.ts_ids
         }
 
-    def _start_simulation(self):
+    def _start_simulation(self): 
         sumo_cmd = [
             self._sumo_binary,
-            "-n",
-            self._net,
-            "-r",
-            self._route,
-            "--max-depart-delay",
-            str(self.max_depart_delay),
-            "--waiting-time-memory",
-            str(self.waiting_time_memory),
-            "--time-to-teleport",
-            str(self.time_to_teleport),
+            "-n", self._net,
         ]
+
+        # 多个 route/flow 文件
+        if self._route:
+            sumo_cmd.extend(["-r", self._route])
+
+        sumo_cmd.extend([
+            "--max-depart-delay", str(self.max_depart_delay),
+            "--waiting-time-memory", str(self.waiting_time_memory),
+            "--time-to-teleport", str(self.time_to_teleport),
+        ])
+
         if self.begin_time > 0:
             sumo_cmd.append(f"-b {self.begin_time}")
         if self.sumo_seed == "random":
@@ -217,6 +246,14 @@ class SumoEnvironment(gym.Env):
             sumo_cmd.append("--no-warnings")
         if self.additional_sumo_cmd is not None:
             sumo_cmd.extend(self.additional_sumo_cmd.split())
+        
+        # add additional files (vType, stops, polygons, etc.)
+        if self.additional_files:
+            sumo_cmd.extend(["--additional-files", self.additional_files])
+
+        if self.add_instruction:
+            sumo_cmd.extend(self.add_instruction)
+
         if self.use_gui or self.render_mode is not None:
             sumo_cmd.extend(["--start", "--quit-on-end"])
             if self.render_mode == "rgb_array":
@@ -239,6 +276,7 @@ class SumoEnvironment(gym.Env):
             if "DEFAULT_VIEW" not in dir(traci.gui):  # traci.gui.DEFAULT_VIEW is not defined in libsumo
                 traci.gui.DEFAULT_VIEW = "View #0"
             self.sumo.gui.setSchema(traci.gui.DEFAULT_VIEW, "real world")
+
 
     def reset(self, seed: Optional[int] = None, **kwargs):
         """Reset the environment."""
@@ -265,6 +303,8 @@ class SumoEnvironment(gym.Env):
             return self._compute_observations()[self.ts_ids[0]], self._compute_info()
         else:
             return self._compute_observations()
+     
+
 
     @property
     def sim_step(self) -> float:
@@ -321,12 +361,13 @@ class SumoEnvironment(gym.Env):
             for ts, action in actions.items():
                 if self.traffic_signals[ts].time_to_act:
                     self.traffic_signals[ts].set_next_phase(action)
-
+    
+    #判断仿真是否结束，信号灯是否继续运行
     def _compute_dones(self):
         dones = {ts_id: False for ts_id in self.ts_ids}
         dones["__all__"] = self.sim_step >= self.sim_max_time
         return dones
-
+    #收集和返回当前仿真的一些统计信息
     def _compute_info(self):
         info = {"step": self.sim_step}
         if self.add_system_info:
@@ -336,6 +377,7 @@ class SumoEnvironment(gym.Env):
         self.metrics.append(info.copy())
         return info
 
+    #返回观测值
     def _compute_observations(self):
         self.observations.update(
             {
@@ -350,6 +392,7 @@ class SumoEnvironment(gym.Env):
             if self.traffic_signals[ts].time_to_act or self.fixed_ts
         }
 
+    #返回奖励值
     def _compute_rewards(self):
         self.rewards.update(
             {
@@ -405,6 +448,18 @@ class SumoEnvironment(gym.Env):
         self.num_arrived_vehicles += self.sumo.simulation.getArrivedNumber()
         self.num_departed_vehicles += self.sumo.simulation.getDepartedNumber()
         self.num_teleported_vehicles += self.sumo.simulation.getEndingTeleportNumber()
+        # ========================
+        # 记录 ambulance_flow2 车辆时间
+        current_vehicles = self.sumo.vehicle.getIDList()
+        for veh_id in current_vehicles:
+            if veh_id.startswith("ambulance_flow2") and veh_id not in self.ambulance_times:
+                self.ambulance_times[veh_id] = {"enter": self.sim_step, "exit": None}
+
+        # 检查已经离开的车辆
+        for veh_id, t in self.ambulance_times.items():
+            if t["exit"] is None and veh_id not in current_vehicles:
+                self.ambulance_times[veh_id]["exit"] = self.sim_step
+        # ========================
 
     def _get_system_info(self):
         vehicles = self.sumo.vehicle.getIDList()
@@ -431,11 +486,15 @@ class SumoEnvironment(gym.Env):
             sum(self.traffic_signals[ts].get_accumulated_waiting_time_per_lane()) for ts in self.ts_ids
         ]
         average_speed = [self.traffic_signals[ts].get_average_speed() for ts in self.ts_ids]
+        average_waiting_time = [
+            self.traffic_signals[ts].get_average_waiting_time() for ts in self.ts_ids
+    ]
         info = {}
         for i, ts in enumerate(self.ts_ids):
             info[f"{ts}_stopped"] = stopped[i]
             info[f"{ts}_accumulated_waiting_time"] = accumulated_waiting_time[i]
             info[f"{ts}_average_speed"] = average_speed[i]
+            info[f"{ts}_average_waiting_time"] = average_waiting_time[i]
         info["agents_total_stopped"] = sum(stopped)
         info["agents_total_accumulated_waiting_time"] = sum(accumulated_waiting_time)
         return info
@@ -485,6 +544,13 @@ class SumoEnvironment(gym.Env):
             df = pd.DataFrame(self.metrics)
             Path(Path(out_csv_name).parent).mkdir(parents=True, exist_ok=True)
             df.to_csv(out_csv_name + f"_conn{self.label}_ep{episode}" + ".csv", index=False)
+            if self.ambulance_times:
+                df_ambulance = pd.DataFrame([
+                    {"veh_id": vid, "enter": t["enter"], "exit": t["exit"], "duration": t["exit"]-t["enter"]}
+                    for vid, t in self.ambulance_times.items() if t["exit"] is not None
+                ])
+                df_ambulance.to_csv(Path(out_csv_name).with_suffix(".ambulance.csv"), index=False)
+
 
     # Below functions are for discrete state space
 

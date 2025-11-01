@@ -1,0 +1,16 @@
+载入 net-file (从 'E:\Users\35601\Desktop\sumo-rl-副本\net\bologna\acosta\acosta_buslanes.net.xml') ... done (23ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-rl-副本\net\bologna\acosta\acosta_vtypes.add.xml') ... done (4ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-rl-副本\net\bologna\acosta\acosta_detectors.add.xml') ... done (2ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-rl-副本\net\bologna\acosta\acosta_bus_stops.add.xml') ... done (1ms).
+载入 additional-files (从 'E:\Users\35601\Desktop\sumo-rl-副本\net\bologna\acosta\acosta_tls.add.xml') ... done (1ms).
+载入完成。
+仿真开始时间： 0.00。
+仿真于此时刻结束：1251.00.
+Performance:
+ Duration: 8.83s
+ Real time factor: 141.708
+ UPS: 70367.353874
+Vehicles:
+ Inserted: 2817 (Loaded: 3448)
+ Running: 595
+ Waiting: 234

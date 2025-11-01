@@ -12,7 +12,7 @@ else:
     raise ImportError("Please declare the environment variable 'SUMO_HOME'")
 import numpy as np
 from gymnasium import spaces
-
+import statistics
 
 class TrafficSignal:
     """This class represents a Traffic Signal controlling an intersection.
@@ -85,12 +85,15 @@ class TrafficSignal:
         self.is_yellow = False
         self.time_since_last_phase_change = 0
         self.next_action_time = begin_time
+        self.last_ts_average_speed = 0.0
+        self.last_total_queued = 0.0
         self.last_ts_waiting_time = 0.0
         self.last_reward = None
         self.reward_fn = reward_fn
         self.reward_weights = reward_weights
         self.sumo = sumo
 
+        #奖励函数的选取
         if type(self.reward_fn) is list:
             self.reward_dim = len(self.reward_fn)
             self.reward_list = [self._get_reward_fn_from_string(reward_fn) for reward_fn in self.reward_fn]
@@ -98,7 +101,7 @@ class TrafficSignal:
             self.reward_dim = 1
             self.reward_list = [self._get_reward_fn_from_string(self.reward_fn)]
 
-        if self.reward_weights is not None:
+        if self.reward_weights is None:
             self.reward_dim = 1  # Since it will be scalarized
 
         self.reward_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.reward_dim,), dtype=np.float32)
@@ -116,7 +119,7 @@ class TrafficSignal:
 
         self.observation_space = self.observation_fn.observation_space()
         self.action_space = spaces.Discrete(self.num_green_phases)
-
+    
     def _get_reward_fn_from_string(self, reward_fn):
         if type(reward_fn) is str:
             if reward_fn in TrafficSignal.reward_fns.keys():
@@ -127,7 +130,7 @@ class TrafficSignal:
 
     def _build_phases(self):
         phases = self.sumo.trafficlight.getAllProgramLogics(self.id)[0].phases
-        if self.env.fixed_ts:
+        if self.id not in self.env.rl_tls_ids:
             self.num_green_phases = len(phases) // 2  # Number of green phases == number of phases (green+yellow) divided by 2
             return
 
@@ -159,6 +162,87 @@ class TrafficSignal:
         logic.phases = self.all_phases
         self.sumo.trafficlight.setProgramLogic(self.id, logic)
         self.sumo.trafficlight.setRedYellowGreenState(self.id, self.all_phases[0].state)
+
+    
+    def get_average_waiting_time(self):
+        waiting_times = []
+        for lane in self.lanes:
+            veh_ids = self.sumo.lane.getLastStepVehicleIDs(lane)
+            waits = [self.sumo.vehicle.getWaitingTime(vid) for vid in veh_ids] if veh_ids else []
+            if waits:
+                waiting_times.extend(waits)
+        return 0.0 if not waiting_times else np.mean(waiting_times)
+
+
+    def get_rl_phase_info(self):
+        """
+        Returns information of RL-controllable green phases only:
+        - 当前 RL 绿灯相位索引
+        - 当前相位持续时间
+        - RL 可控绿灯相位数量
+        - 每个绿灯相位控制的车道、排队、等待时间等详情
+        """
+        tls_id = self.id
+        phase_duration = self.time_since_last_phase_change
+
+        green_phases = self.green_phases
+        n_phases = self.num_green_phases
+        all_phases = self.all_phases
+
+        # 直接用 TrafficSignal 自身维护的 green_phase
+        current_phase_index = self.green_phase if not self.is_yellow else -1
+
+        # 获取 controlled_links
+        controlled_links = self.sumo.trafficlight.getControlledLinks(tls_id)
+
+        phase_details = {}
+        for phase_index, phase in enumerate(green_phases):
+            state = phase.state
+            lanes_in_this_phase = []
+
+            for signal_index, signal_state in enumerate(state):
+                if signal_state in ("G", "g"):
+                    for link in controlled_links[signal_index] or []:
+                        in_lane = link[0]
+                        if in_lane not in lanes_in_this_phase:
+                            lanes_in_this_phase.append(in_lane)
+
+            # 汇总所有车辆的等待时间
+            queue_lens = []
+            all_waits = []
+            veh_types_all = []
+
+            for lane in lanes_in_this_phase:
+                queue_len = self.sumo.lane.getLastStepHaltingNumber(lane)
+                veh_ids = self.sumo.lane.getLastStepVehicleIDs(lane)
+                waits = [self.sumo.vehicle.getWaitingTime(vid) for vid in veh_ids] if veh_ids else []
+                veh_types = [self.sumo.vehicle.getTypeID(vid) for vid in veh_ids] if veh_ids else []
+
+                queue_lens.append(queue_len)
+                all_waits.extend(waits)
+                veh_types_all.extend(veh_types)
+
+            avg_wait_time = sum(all_waits)/len(all_waits) if all_waits else 0
+
+            phase_details[f"相位{phase_index}"] = {
+                "最大排队长度": max(queue_lens) if queue_lens else 0,
+                "平均排队长度": statistics.mean(queue_lens) if queue_lens else 0,
+                "最大等待时间": max(all_waits) if all_waits else 0,
+                "平均等待时间": avg_wait_time,
+                "车辆种类": sorted(set(veh_types_all)),
+                "控制车道": lanes_in_this_phase,
+            }
+
+
+        return {
+            "当前相位": current_phase_index,
+            "当前相位持续时间": phase_duration,
+            "相位数量": n_phases,
+            "相位详情": phase_details,
+        }
+
+
+
 
     @property
     def time_to_act(self):
@@ -221,15 +305,24 @@ class TrafficSignal:
         return self.get_pressure()
 
     def _average_speed_reward(self):
-        return self.get_average_speed()
+        ts_average_speed = self.get_average_speed()
+        reward = ts_average_speed - self.last_ts_average_speed
+        self.last_ts_average_speed = ts_average_speed
+        print(f"average_speed_reward:{reward}")
+        return reward
 
     def _queue_reward(self):
-        return -self.get_total_queued()
+        ts_total_queued = self.get_total_queued()
+        reward = self.last_total_queued - ts_total_queued
+        self.last_total_queued = ts_total_queued
+        print(f"queue_reward:{reward}")
+        return reward
 
     def _diff_waiting_time_reward(self):
-        ts_wait = sum(self.get_accumulated_waiting_time_per_lane()) / 100.0
+        ts_wait = sum(self.get_accumulated_waiting_time_per_lane()) / 50
         reward = self.last_ts_waiting_time - ts_wait
         self.last_ts_waiting_time = ts_wait
+        print(f"diff_waiting_time_reward:{reward}")
         return reward
 
     def _observation_fn_default(self):
@@ -310,7 +403,6 @@ class TrafficSignal:
         """
         lanes_queue = [
             self.sumo.lane.getLastStepHaltingNumber(lane)
-            / (self.lanes_length[lane] / (self.MIN_GAP + self.sumo.lane.getLastStepLength(lane)))
             for lane in self.lanes
         ]
         return [min(1, queue) for queue in lanes_queue]
