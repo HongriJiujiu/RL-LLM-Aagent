@@ -6,7 +6,11 @@ from pathlib import Path
 import subprocess
 import streamlit as st
 from simulation import simulation_start
-
+import os
+import sys
+# 如果环境变量不存在，可以手动设置
+if "SUMO_HOME" not in os.environ:
+    os.environ["SUMO_HOME"] = "/usr/share/sumo"
 # --- SUMO 环境检查 ---
 def init_sumo_env():
     if "SUMO_HOME" in os.environ:
