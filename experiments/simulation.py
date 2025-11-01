@@ -31,7 +31,7 @@ def simulation_start(model_name,API_KEY,llm,NET_FILE,ROU_FILE,ADDITIONAL_FILES,r
     args.min_green = 10
     args.max_green = 60
 
-    args.gui = True
+    args.gui = False
     args.fixed = False
     if args.fixed:
         rl_tls_ids=[]
