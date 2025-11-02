@@ -2,10 +2,10 @@ import os
 import sys
 # 设置 SUMO_HOME 为仓库内的 sumo 文件夹
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sumo_home = os.path.join(repo_root, "sumo-1.21.0")
+sumo_home = os.path.join(repo_root, "sumo")
 # 如果环境变量不存在，可以手动设置
 if "SUMO_HOME" not in os.environ:
-    os.environ["SUMO_HOME"] = "sumo-1.21.0"
+    os.environ["SUMO_HOME"] = "sumo-home"
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
