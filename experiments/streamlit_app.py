@@ -16,6 +16,7 @@ from simulation import simulation_start
 # --- SUMO 环境检查 ---
 def init_sumo_env():
     if "SUMO_HOME" in os.environ:
+        print(os.environ["SUMO_HOME"] )
         tools = os.path.join(os.environ["SUMO_HOME"], "tools")
         sys.path.append(tools)
     else:
